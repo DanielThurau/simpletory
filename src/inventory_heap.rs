@@ -11,7 +11,7 @@ pub struct InventoryView {
     price_per_item: Decimal,
 }
 
-trait MinHeap {
+pub trait MinHeap {
     fn heapify(&mut self, index: usize);
 
     fn insert(&mut self, inventory: Inventory);
@@ -34,7 +34,8 @@ trait MinHeap {
 
 /// Heavily influenced by
 /// https://www.journaldev.com/36805/min-heap-binary-tree
-struct InventoryHeap {
+#[derive(Default)]
+pub struct InventoryHeap {
     heap: Vec<Inventory>,
 }
 
