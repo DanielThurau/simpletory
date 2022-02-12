@@ -3,12 +3,12 @@ use std::cmp::Ordering;
 
 #[derive(Default, Clone, Copy, Eq)]
 pub struct Inventory {
-    price_per_item: Decimal,
-    quantity: u64,
+    pub price_per_item: Decimal,
+    pub quantity: usize,
 }
 
 pub struct InventoryView {
-    price_per_item: Decimal,
+    pub inventory: Vec<Inventory>,
 }
 
 pub trait MinHeap {
@@ -120,7 +120,10 @@ impl MinHeap for InventoryHeap {
         let inventory = &self.heap[0];
 
         InventoryView {
-            price_per_item: inventory.price_per_item.clone(),
+            inventory: vec![Inventory {
+                price_per_item: inventory.price_per_item.clone(),
+                quantity: inventory.quantity,
+            }],
         }
     }
 
@@ -281,9 +284,9 @@ mod tests {
             heap.insert(inv);
         }
 
-        let mut smallest = heap.extract().price_per_item;
+        let mut smallest = heap.extract()[0].price_per_item;
         while !heap.is_empty() {
-            let heap_min = heap.extract().price_per_item;
+            let heap_min = heap.extract()[0].price_per_item;
             assert!(smallest <= heap_min);
             smallest = heap_min;
         }

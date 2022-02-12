@@ -1,11 +1,13 @@
-use crate::inventory_heap::{InventoryHeap, MinHeap};
+use crate::inventory_heap::{Inventory, InventoryHeap, MinHeap};
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
 
 mod inventory_heap;
 
+#[derive(Eq, PartialEq)]
 enum TransactionType {
     Produce,
     Consume,
@@ -14,8 +16,8 @@ enum TransactionType {
 struct Transaction {
     transaction_type: TransactionType,
     inventory_id: String,
-    total: Decimal,
     quantity: usize,
+    total_cost: Option<Decimal>,
 }
 
 #[derive(Default)]
@@ -71,17 +73,122 @@ where
 }
 
 impl<T: MinHeap> Warehouse<T> {
-    fn transact(&self, t: Transaction) -> Result<(), WarehouseError> {
-        // 1. Check validity of the transaction
-        // 1.5. Check
-        // 2. If produce, call internal produce_method
-        // 3. If consume, call internal consume_method
-        // 4. If operation succeeds, add to the the transaction_history
+    fn transact(&mut self, t: Transaction) -> Result<(), WarehouseError> {
+        self.validate_transaction(&t)?;
+
+        match t.transaction_type {
+            TransactionType::Produce => {
+                self.produce(&t)?;
+            }
+            TransactionType::Consume => {
+                self.consume(&t)?;
+            }
+        }
+
+        self.transaction_history.history.push(t);
+
+        Ok(())
+    }
+
+    fn validate_transaction(&self, t: &Transaction) -> Result<(), WarehouseError> {
+        if t.transaction_type == TransactionType::Produce {
+            if t.total_cost.is_none() {
+                println!("cost_total should be not be None if TransactionType is Produce");
+                return Err(WarehouseError);
+            }
+        } else if t.transaction_type == TransactionType::Consume {
+            if t.total_cost.is_some() {
+                println!("cost_total should be not be Some(_) if TransactionType is Consume");
+                return Err(WarehouseError);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn produce(&mut self, t: &Transaction) -> Result<(), WarehouseError> {
+        let id = self.inventory_id_map.get_inventory_key(&t.inventory_id)?;
+
+        let inventory = Inventory {
+            price_per_item: t.total_cost.unwrap() / Decimal::new(t.quantity as i64, 0),
+            quantity: t.quantity,
+        };
+
+        self.inventory_heaps
+            .entry(id)
+            .and_modify(|heap| heap.insert(inventory))
+            .or_insert_with(|| {
+                let mut heap = T::new();
+                heap.insert(inventory);
+                heap
+            });
+
+        println!("Processed a produce transaction for product '{}' with quantity {} and price per item {}",
+                 t.inventory_id, inventory.quantity, inventory.price_per_item);
+
+        Ok(())
+    }
+
+    fn consume(&mut self, t: &Transaction) -> Result<(), WarehouseError> {
+        let id = self.inventory_id_map.get_inventory_key(&t.inventory_id)?;
+
+        let inventory_view = match self.inventory_heaps.get_mut(&id) {
+            Some(heap) => Ok(heap.extract()),
+            None => {
+                println!(
+                    "Trying to consume inventory({}) that doesn't exist",
+                    t.inventory_id
+                );
+                Err(WarehouseError)
+            }
+        }?;
+
+        println!(
+            "Processed a consume transaction for product '{}'",
+            t.inventory_id
+        );
+        for inventory_block in inventory_view.inventory {
+            println!(
+                "Consumed quantity ({}) at price ({})",
+                inventory_block.quantity, inventory_block.price_per_item
+            );
+        }
 
         Ok(())
     }
 }
 
+
+fn create_transaction(
+    inventory_id: String,
+    total_cost: Option<Decimal>,
+    transaction_type: TransactionType,
+    quantity: usize
+) -> Transaction {
+    Transaction {
+        transaction_type,
+        inventory_id,
+        quantity,
+        total_cost
+    }
+}
+
 fn main() {
-    let warehouse: Warehouse<InventoryHeap> = Warehouse::default();
+    let mut warehouse: Warehouse<InventoryHeap> = Warehouse::default();
+
+    let t = create_transaction(String::from("Acrylic Box"), Some(dec!(10.00)), TransactionType::Produce, 9);
+
+    match warehouse.transact(t) {
+        Err(e) => panic!("Ooops {}", e),
+        _ => (),
+    }
+
+    let t2 = create_transaction(String::from("Acrylic Box"), None, TransactionType::Consume, 1);
+
+    match warehouse.transact(t2) {
+        Err(e) => panic!("Ooops {}", e),
+        _ => (),
+    }
+
+
 }
